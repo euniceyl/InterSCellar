@@ -104,17 +104,13 @@ def precompute_global_surface_and_halo_bboxes(
 ) -> Tuple[np.ndarray, Dict[int, Tuple[slice, slice, slice]]]:
     print("Pre-computing global surface and halo-extended bounding boxes...")
     
-    # Step 1: Compute global surface mask once
     global_surface = global_surface_26n(mask_3d)
     
-    # Step 2: Get all bounding boxes
     all_bboxes = all_cell_bboxes(mask_3d)
     
-    # Step 3: Precompute halo-extended bounding boxes
     print("Pre-computing halo-extended bounding boxes...")
     all_bboxes_with_halo = {}
     
-    # Calculate halo padding
     pad_z = math.ceil(max_distance_um / voxel_size_um[0])
     pad_y = math.ceil(max_distance_um / voxel_size_um[1])
     pad_x = math.ceil(max_distance_um / voxel_size_um[2])
@@ -122,7 +118,6 @@ def precompute_global_surface_and_halo_bboxes(
     for cell_id, bbox in all_bboxes.items():
         slice_z, slice_y, slice_x = bbox
         
-        # Create extended bounding box with halo
         z_start = max(0, slice_z.start - pad_z)
         z_stop = min(mask_3d.shape[0], slice_z.stop + pad_z)
         y_start = max(0, slice_y.start - pad_y)
@@ -218,7 +213,7 @@ def find_touching_neighbors_direct_adjacency(mask_3d: np.ndarray, all_bboxes: di
     print(f"Identified {len(touching_pairs)} touching neighbor pairs.")
     return touching_pairs
 
-def find_all_neighbors_by_surface_distance_optimized(
+def find_all_neighbors_by_surface_distance_3d(
     mask_3d: np.ndarray,
     metadata_df: pd.DataFrame,
     max_distance_um: float = 0.5,
@@ -252,7 +247,6 @@ def find_all_neighbors_by_surface_distance_optimized(
     touching_count = len(neighbor_data)
     print(f"Found {touching_count} touching neighbor pairs")
     
-    # If max_distance_um = 0.0, return only touching cells
     if max_distance_um == 0.0:
         print(f"Returning only touching cells (max_distance_um = 0.0)")
         neighbor_df = pd.DataFrame(neighbor_data)
@@ -270,7 +264,7 @@ def find_all_neighbors_by_surface_distance_optimized(
     
     touching_pairs_set = touching_pairs
     
-    def process_cell_pair_optimized(cell_a_idx):
+    def process_cell_pair(cell_a_idx):
         cell_a_id = cell_ids[cell_a_idx]
         cell_a_centroid = scaled_centroids[cell_a_idx]
         
@@ -290,7 +284,7 @@ def find_all_neighbors_by_surface_distance_optimized(
                 continue # Skip pair if already touching
             
             try:
-                distance = compute_surface_to_surface_distance_optimized(
+                distance = compute_surface_to_surface_distance_3d(
                     mask_3d, cell_a_id, cell_b_id, voxel_size_um, max_distance_um
                 )
                 
@@ -303,7 +297,7 @@ def find_all_neighbors_by_surface_distance_optimized(
                         'surface_distance_um': distance
                     })
             except Exception as e:
-                print(f"Error computing optimized distance for pair ({cell_a_id}, {cell_b_id}): {e}")
+                print(f"Error computing distance for pair ({cell_a_id}, {cell_b_id}): {e}")
                 continue
         
         return neighbors
@@ -311,7 +305,7 @@ def find_all_neighbors_by_surface_distance_optimized(
     # Optimization: parallel processing
     print(f"Processing {len(cell_ids)} cells for non-touching neighbors...")
     results = Parallel(n_jobs=n_jobs)(
-        delayed(process_cell_pair_optimized)(i) for i in tqdm(range(len(cell_ids)), desc="Finding non-touching neighbors with optimized EDT")
+        delayed(process_cell_pair)(i) for i in tqdm(range(len(cell_ids)), desc="Finding non-touching neighbors...")
     )
     
     for cell_neighbors in results:
@@ -338,7 +332,7 @@ def find_all_neighbors_by_surface_distance_optimized(
 
 ## Surface-to-surface distance computation
 
-def compute_surface_to_surface_distance_optimized(
+def compute_surface_to_surface_distance_3d(
     mask_3d: np.ndarray, 
     cell_a_id: int, 
     cell_b_id: int, 
@@ -357,13 +351,11 @@ def compute_surface_to_surface_distance_optimized(
     if not surface_a.any() or not surface_b.any():
         return float('inf')
     
-    # Step 1: Compute bounding box and halo
     bbox_with_halo = compute_bounding_box_with_halo(surface_a, max_distance_um, voxel_size_um)
     
     if bbox_with_halo is None:
         return float('inf')
     
-    # Step 2: Slice both arrays into the cropped subvolume
     slice_z, slice_y, slice_x = bbox_with_halo
     surface_a_crop = surface_a[slice_z, slice_y, slice_x]
     surface_b_crop = surface_b[slice_z, slice_y, slice_x]
@@ -371,14 +363,12 @@ def compute_surface_to_surface_distance_optimized(
     if not surface_b_crop.any():
         return float('inf')
     
-    # Step 3: Run EDT on the cropped region
     dist_transform_crop = distance_transform_edt(~surface_a_crop, sampling=voxel_size_um)
     
-    # Step 4: Read minimum distance from cropped EDT result
     min_distance = dist_transform_crop[surface_b_crop].min()
     return min_distance
 
-def compute_surface_distances_batch_optimized(
+def compute_surface_distances_batch_3d(
     global_surface: np.ndarray,
     cell_pairs: List[Tuple[int, int]],
     voxel_size_um: tuple,
@@ -394,7 +384,6 @@ def compute_surface_distances_batch_optimized(
     print("Computing surface distances for unique crop regions...")
     print(f"Processing {len(cell_pairs)} cell pairs with max_distance_um = {max_distance_um}")
     
-    # Step 1: Identify all unique crop regions needed
     print("Step 1: Identifying unique crop regions...")
     unique_crops = set()
     cell_to_crop_tuple = {}
@@ -409,11 +398,8 @@ def compute_surface_distances_batch_optimized(
             cell_to_crop_tuple[cell_a_id] = crop_tuple
     
     total_cells = len(set(pair[0] for pair in cell_pairs if pair[0] in all_bboxes_with_halo))
-    print(f"   ✓ Found {len(unique_crops)} unique crop regions")
-    print(f"   ✓ Reduced from {total_cells} per-cell EDTs to {len(unique_crops)} global EDTs")
-    print(f"   ✓ Expected speedup: ~{total_cells // max(len(unique_crops), 1)}x fewer EDT computations")
+    print(f"Found {len(unique_crops)} unique crop regions")
     
-    # Step 2: Pre-compute EDTs for each unique crop region
     print(f"Step 2: Computing EDTs for {len(unique_crops)} unique crop regions...")
     crop_edts = {}
     
@@ -458,7 +444,6 @@ def compute_surface_distances_batch_optimized(
     
     print(f"Completed EDT computations for all {len(crop_edts)} unique crop regions")
     
-    # Step 3: Extract distances for specific cell pairs
     print("Step 3: Extracting surface-surface distances for all cell pairs...")
     results = []
     cell_type_map = dict(zip(cells_df['cell_id'], cells_df['cell_type']))
@@ -909,7 +894,7 @@ def get_graph_statistics(conn: sqlite3.Connection) -> Dict[str, Any]:
         'neighbor_type_pairs': df_neighbor_types.to_dict('records')
     }
 
-def build_cell_graph_database_optimized(
+def build_cell_graph_database_3d(
     mask_3d: np.ndarray,
     metadata_df: pd.DataFrame,
     max_distance_um: float = 0.5,
@@ -1013,9 +998,8 @@ def build_cell_graph_database_optimized(
     print(f"Found {len(all_candidate_pairs)} candidate pairs")
     
     # Hybrid approach: touching cells + near-neighbors
-    print("Hybrid approach: touching cells (6-connectivity) + near-neighbors (vectorized EDT)...")
+    print("Hybrid approach: touching cells (6-connectivity) + near-neighbors...")
     
-    # Step 1: Find touching cells
     print("Step 1: Finding touching cells...")
     touching_pairs = find_touching_neighbors_direct_adjacency(mask_3d, all_bboxes, n_jobs)
     touching_neighbor_data = []
@@ -1035,7 +1019,6 @@ def build_cell_graph_database_optimized(
     touching_count = len(touching_neighbor_data)
     print(f"Found {touching_count} touching neighbor pairs")
     
-    # Step 2: For max_distance_um > 0.0, find additional neighbors within distance threshold
     if max_distance_um > 0.0:
         print(f"Step 2: Finding additional neighbors within {max_distance_um} μm...")
         
@@ -1048,7 +1031,7 @@ def build_cell_graph_database_optimized(
         
         print(f"Processing {len(non_touching_candidates)} non-touching candidate pairs...")
         
-        near_neighbor_pairs = compute_surface_distances_batch_optimized(
+        near_neighbor_pairs = compute_surface_distances_batch_3d(
             global_surface, non_touching_candidates, voxel_size_um, max_distance_um, cells_df, mask_3d, all_bboxes_with_halo, n_jobs
         )
         
@@ -1146,7 +1129,7 @@ def build_cell_graph_database_optimized(
     
     return conn
 
-def create_neighbor_edge_table_optimized(
+def create_neighbor_edge_table_3d(
     ome_zarr_path: str,
     metadata_df: pd.DataFrame,
     max_distance_um: float = 0.5,
@@ -1188,7 +1171,7 @@ def create_neighbor_edge_table_optimized(
     if missing_cols:
         raise ValueError(f"Missing required columns in metadata: {missing_cols}")
     
-    neighbor_df = find_all_neighbors_by_surface_distance_optimized(
+    neighbor_df = find_all_neighbors_by_surface_distance_3d(
         mask_3d=mask_3d,
         metadata_df=metadata_df,
         max_distance_um=max_distance_um,
@@ -1199,11 +1182,11 @@ def create_neighbor_edge_table_optimized(
     
     if output_csv:
         neighbor_df.to_csv(output_csv, index=False)
-        print(f"Optimized neighbor edge table saved to: {output_csv}")
+        print(f"Neighbor edge table saved to: {output_csv}")
     
     return neighbor_df
 
-def create_neighbor_edge_table_database_optimized(
+def create_neighbor_edge_table_database_3d(
     ome_zarr_path: str,
     metadata_df: pd.DataFrame,
     max_distance_um: float = 0.5,
@@ -1255,7 +1238,7 @@ def create_neighbor_edge_table_database_optimized(
     if missing_cols:
         raise ValueError(f"Missing required columns in metadata: {missing_cols}")
     
-    conn = build_cell_graph_database_optimized(
+    conn = build_cell_graph_database_3d(
         mask_3d=mask_3d,
         metadata_df=metadata_df,
         max_distance_um=max_distance_um,
@@ -1277,7 +1260,7 @@ def create_neighbor_edge_table_database_optimized(
     if output_csv:
         df_neighbors = pd.read_sql_query("SELECT * FROM neighbors", conn)
         df_neighbors.to_csv(output_csv, index=False)
-        print(f"Optimized neighbor edge table saved to: {output_csv}")
+        print(f"Neighbor edge table saved to: {output_csv}")
     
     # Export to AnnData
     if output_anndata:

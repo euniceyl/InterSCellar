@@ -2013,7 +2013,6 @@ def build_interscellar_volume_database_from_neighbors(
             print(f"Warning: AnnData export failed (non-fatal): {e}")
             print(f"Error type: {type(e).__name__}")
             print(f"Other outputs (CSV, DB, Zarr) are still available.")
-            print(f"AnnData can be created using: python wrapper/recreate_anndata.py")
             import traceback
             traceback.print_exc()
     

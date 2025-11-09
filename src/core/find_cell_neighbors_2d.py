@@ -582,7 +582,7 @@ def find_all_neighbors_by_surface_distance_2d(
     
     touching_pairs_set = touching_pairs
     
-    def process_cell_pair_optimized(cell_a_idx):
+    def process_cell_pair(cell_a_idx):
         cell_a_id = cell_ids[cell_a_idx]
         cell_a_centroid = scaled_centroids[cell_a_idx]
         
@@ -623,7 +623,7 @@ def find_all_neighbors_by_surface_distance_2d(
     # Optimization: parallel processing of all cells
     print(f"Processing {len(cell_ids)} cells for non-touching neighbors...")
     results = Parallel(n_jobs=n_jobs)(
-        delayed(process_cell_pair_optimized)(i) for i in tqdm(range(len(cell_ids)), desc="Finding non-touching neighbors...")
+        delayed(process_cell_pair)(i) for i in tqdm(range(len(cell_ids)), desc="Finding non-touching neighbors...")
     )
     
     for cell_neighbors in results:

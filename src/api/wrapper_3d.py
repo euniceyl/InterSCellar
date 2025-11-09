@@ -80,7 +80,7 @@ def find_cell_neighbors_3d(
     if max_distance_um == 0.0:
         print(f"Mode: Touching cells only")
     else:
-        print(f"Mode: Touching cells + near-neighbors (on-demand surface extraction)")
+        print(f"Mode: Touching cells + near-neighbors")
     
     step2_start = time.time()
     
@@ -106,10 +106,10 @@ def find_cell_neighbors_3d(
         )
         
         if save_surfaces_pickle:
-            print(f"   Saving global surface to: {save_surfaces_pickle}")
+            print(f"Saving global surface to: {save_surfaces_pickle}")
         
         if save_graph_state_pickle:
-            print(f"   Saving graph state to: {save_graph_state_pickle}")
+            print(f"Saving graph state to: {save_graph_state_pickle}")
         
         step2_time = time.time() - step2_start
         print(f"Neighbor graph created successfully")
@@ -164,7 +164,7 @@ def find_cell_neighbors_3d(
         conn.close()
         return neighbor_table_df, adata, None
 
-def compute_interscellar_volumes(
+def compute_interscellar_volumes_3d(
     ome_zarr_path: str,
     neighbor_pairs_csv: str,
     global_surface_pickle: str,
