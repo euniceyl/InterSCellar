@@ -34,6 +34,4 @@ language = 'English'
 html_theme = 'sphinx_book_theme'
 html_static_path = ['_static']
 
-# GitHub Pages URL - Update this when the repository is transferred
-# Format: https://<org-or-username>.github.io/<repo-name>/
-html_baseurl = os.environ.get('SPHINX_HTML_BASEURL', 'https://eunicelee153.github.io/InterSCellar/')
+html_baseurl = os.environ.get('SPHINX_HTML_BASEURL', 'https://euniceyl.github.io/InterSCellar/')
