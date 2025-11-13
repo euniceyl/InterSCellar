@@ -1,13 +1,11 @@
-# InterSCellar
-
 ```{include} ../README.md
-:relative-docs: .
-:relative-images:
+```
 
 ## Contents
+
 ```{toctree}
-:hidden: true
-:maxdepth: 4
+:maxdepth: 2
+:caption: Documentation
 
 installation
 tutorials/index

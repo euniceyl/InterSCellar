@@ -38,7 +38,6 @@ source_suffix = {
 
 master_doc = "index"
 
-# MyST parser configuration
 myst_enable_extensions = ["colon_fence", "substitution"]
 myst_substitutions = {
     "image_path": "images/package_workflow.jpeg"
@@ -61,6 +60,8 @@ html_theme_options = {
     "repository_url": "https://github.com/euniceyl/InterSCellar",
     "use_repository_button": True,
     "use_edit_page_button": True,
+    "show_navbar_depth": 2,
+    "show_toc_level": 2,
 }
 
 # Autodoc settings
