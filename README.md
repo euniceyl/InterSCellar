@@ -4,7 +4,9 @@
 
 **InterSCellar** is a Python package for surface-Based cell neighborhood and interaction volume analysis in 3D spatial omics.
 
-![Package workflow](docs/package_workflow.jpeg)
+Input/Output/Functionalities
+
+![Package workflow](https://raw.githubusercontent.com/euniceyl/InterSCellar/main/docs/images/package_workflow.jpeg)
 
 ## Installation
 

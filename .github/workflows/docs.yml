@@ -2,10 +2,10 @@ name: Deploy Documentation
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
     paths:
       - 'docs/**'
+      - 'README.md'
       - 'src/**'
       - 'pyproject.toml'
       - '.github/workflows/docs.yml'
@@ -18,11 +18,15 @@ permissions:
 
 concurrency:
   group: "pages"
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
-  build:
+  deploy:
     runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -30,35 +34,27 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
-      - name: Install package and dependencies
+      - name: Install package and docs dependencies
         run: |
           pip install -e .
           pip install sphinx sphinx-book-theme myst-parser
 
-      - name: Build documentation
+      - name: Build Sphinx HTML
         working-directory: docs
         run: |
           make clean
           make html
 
       - name: Setup Pages
-        uses: actions/configure-pages@v4
+        uses: actions/configure-pages@v5
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: docs/_build/html
 
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
-    needs: build
-    steps:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
-

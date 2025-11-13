@@ -38,6 +38,12 @@ source_suffix = {
 
 master_doc = "index"
 
+# MyST parser configuration
+myst_enable_extensions = ["colon_fence", "substitution"]
+myst_substitutions = {
+    "image_path": "images/package_workflow.jpeg"
+}
+
 templates_path = ['_templates']
 exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 
