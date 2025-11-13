@@ -303,7 +303,29 @@ def compute_interscellar_volumes_3d(
     print(f"\n1. Validating input files...")
     step1_start = time.time()
     
-    required_files = [ome_zarr_path, neighbor_pairs_csv]
+    # Validate required files
+    required_files = [ome_zarr_path]
+    
+    # Either neighbor_pairs_csv OR neighbor_db_path must be provided
+    if not neighbor_pairs_csv and not neighbor_db_path:
+        raise ValueError("Must provide either neighbor_pairs_csv or neighbor_db_path")
+    
+    if neighbor_pairs_csv and not os.path.exists(neighbor_pairs_csv):
+        if neighbor_db_path and os.path.exists(neighbor_db_path):
+            print(f"Warning: neighbor_pairs_csv not found: {neighbor_pairs_csv}")
+            print(f"Will use database instead: {neighbor_db_path}")
+        else:
+            raise FileNotFoundError(f"neighbor_pairs_csv not found: {neighbor_pairs_csv}")
+    elif neighbor_pairs_csv:
+        required_files.append(neighbor_pairs_csv)
+    
+    if neighbor_db_path and not os.path.exists(neighbor_db_path):
+        if neighbor_pairs_csv and os.path.exists(neighbor_pairs_csv):
+            print(f"Warning: neighbor_db_path not found: {neighbor_db_path}")
+            print(f"Will use CSV instead: {neighbor_pairs_csv}")
+        else:
+            raise FileNotFoundError(f"neighbor_db_path not found: {neighbor_db_path}")
+    
     for file_path in required_files:
         if not os.path.exists(file_path):
             raise FileNotFoundError(f"Required file not found: {file_path}")
@@ -360,6 +382,7 @@ def compute_interscellar_volumes_3d(
         conn, volume_results = build_interscellar_volume_database_from_neighbors(
             mask_3d=mask_3d,
             neighbor_pairs_csv=neighbor_pairs_csv,
+            neighbor_db_path=neighbor_db_path,  # Use database if available (more efficient)
             global_surface_pickle=global_surface_pickle,
             halo_bboxes_pickle=halo_bboxes_pickle,
             voxel_size_um=voxel_size_um,

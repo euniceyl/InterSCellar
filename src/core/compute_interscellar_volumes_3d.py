@@ -22,6 +22,36 @@ except ImportError:
 
 ## Data loading
 
+def load_neighbor_pairs_from_db(db_path: str) -> pd.DataFrame:
+    """Load neighbor pairs from SQLite database (more efficient than CSV)."""
+    print(f"Loading neighbor pairs from database: {db_path}")
+    conn = sqlite3.connect(db_path)
+    
+    cursor = conn.cursor()
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='neighbors'")
+    if not cursor.fetchone():
+        conn.close()
+        raise ValueError(f"Database {db_path} does not contain 'neighbors' table")
+    
+    query = """
+    SELECT 
+        cell_id_a as cell_a_id,
+        cell_id_b as cell_b_id,
+        cell_type_a as cell_a_type,
+        cell_type_b as cell_b_type,
+        surface_distance_um,
+        euclidean_distance_um,
+        pair_id
+    FROM neighbors
+    ORDER BY pair_id
+    """
+    
+    neighbor_df = pd.read_sql_query(query, conn)
+    conn.close()
+    
+    print(f"Loaded {len(neighbor_df)} neighbor pairs from database")
+    return neighbor_df
+
 def load_neighbor_pairs_from_csv(csv_path: str) -> pd.DataFrame:
     print(f"Loading neighbor pairs from: {csv_path}")
     neighbor_df = pd.read_csv(csv_path)
@@ -95,8 +125,6 @@ def load_global_surface_from_pickle(pickle_path: str) -> np.ndarray:
         if 'global_surface' in surface_data:
             global_surface = surface_data['global_surface']
         elif 'all_bboxes_with_halo' in surface_data:
-            # This file contains halo bboxes, not global surface - try graph_state as fallback
-            # Try multiple possible graph_state filenames
             possible_graph_state_paths = [
                 pickle_path.replace('surfaces.pkl', 'graph_state.pkl'),
                 pickle_path.replace('_surfaces.pkl', '_graph_state.pkl'),
@@ -116,7 +144,7 @@ def load_global_surface_from_pickle(pickle_path: str) -> np.ndarray:
                     graph_state = load_graph_state_from_pickle(graph_state_path)
                     if 'surfaces' in graph_state and 'global_surface' in graph_state['surfaces']:
                         global_surface = graph_state['surfaces']['global_surface']
-                        print(f"Successfully loaded global surface from graph_state file")
+                        print(f"Successfully loaded global surface")
                         print(f"Loaded global surface with shape {global_surface.shape} and {global_surface.sum()} surface voxels")
                         return global_surface
                 except Exception as e:
@@ -125,11 +153,8 @@ def load_global_surface_from_pickle(pickle_path: str) -> np.ndarray:
             raise ValueError(
                 f"Pickle file contains halo bounding boxes, not global surface. "
                 f"Expected file with 'global_surface' key, but found 'all_bboxes_with_halo'. "
-                f"Please check the file path. The global surface should be saved separately, "
-                f"or re-run find_cell_neighbors_3d to regenerate the correct files."
             )
         else:
-            # Try to find any numpy array in the dict
             for key, value in surface_data.items():
                 if isinstance(value, np.ndarray):
                     print(f"Warning: Using '{key}' as global surface (expected 'global_surface')")
@@ -1959,9 +1984,10 @@ def export_interscellar_volumes_to_anndata(
 
 def build_interscellar_volume_database_from_neighbors(
     mask_3d: np.ndarray,
-    neighbor_pairs_csv: str,
-    global_surface_pickle: str,
-    halo_bboxes_pickle: str,
+    neighbor_pairs_csv: str = None,
+    neighbor_db_path: str = None,
+    global_surface_pickle: str = None,
+    halo_bboxes_pickle: str = None,
     voxel_size_um: tuple = (0.56, 0.28, 0.28),
     db_path: str = 'interscellar_volumes.db',
     output_csv: str = None,
@@ -1975,7 +2001,20 @@ def build_interscellar_volume_database_from_neighbors(
     print(f"Building interscellar volume database from pre-computed neighbor pairs")
     print(f"Voxel size: {voxel_size_um} μm")
     
-    neighbor_pairs_df = load_neighbor_pairs_from_csv(neighbor_pairs_csv)
+    if neighbor_db_path and os.path.exists(neighbor_db_path):
+        try:
+            neighbor_pairs_df = load_neighbor_pairs_from_db(neighbor_db_path)
+        except Exception as e:
+            print(f"Warning: Could not load from database {neighbor_db_path}: {e}")
+            print(f"Falling back to CSV: {neighbor_pairs_csv}")
+            if neighbor_pairs_csv and os.path.exists(neighbor_pairs_csv):
+                neighbor_pairs_df = load_neighbor_pairs_from_csv(neighbor_pairs_csv)
+            else:
+                raise ValueError(f"Neither database nor CSV file is available. DB: {neighbor_db_path}, CSV: {neighbor_pairs_csv}")
+    elif neighbor_pairs_csv and os.path.exists(neighbor_pairs_csv):
+        neighbor_pairs_df = load_neighbor_pairs_from_csv(neighbor_pairs_csv)
+    else:
+        raise ValueError(f"Must provide either neighbor_db_path or neighbor_pairs_csv. DB: {neighbor_db_path}, CSV: {neighbor_pairs_csv}")
     
     global_surface = load_global_surface_from_pickle(global_surface_pickle)
     halo_bboxes = load_halo_bboxes_from_pickle(halo_bboxes_pickle)
