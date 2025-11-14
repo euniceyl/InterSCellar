@@ -35,7 +35,7 @@ neighbors_3d, adata, conn = interscellar.find_cell_neighbors_3d(
 )
 ```
 
-**(2) Interscellar Volume Computation**
+**(2) Interscellar & Cell-Only Volume Computation**
 ```sh
 volumes_3d, adata, conn = interscellar.compute_interscellar_volumes_3d(
     ome_zarr_path="data/segmentation.zarr",
@@ -48,7 +48,6 @@ volumes_3d, adata, conn = interscellar.compute_interscellar_volumes_3d(
 )
 ```
 
-**(3) Cell-Only Volumes Computation (Optional)**
 ```sh
 output_path = interscellar.compute_cell_only_volumes_3d(
     ome_zarr_path="data/segmentation.zarr",
