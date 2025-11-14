@@ -73,22 +73,78 @@ def main():
                    help="Path to interscellar mesh zarr (contains 'interscellar_meshes')")
     p.add_argument("--seg-zarr", required=True,
                    help="Path to segmentation labels zarr")
-    p.add_argument("--db", required=True,
-                   help="SQLite DB with interscellar_volumes table (to map pair->cell IDs)")
+    p.add_argument("--db", required=False, default=None,
+                   help="SQLite DB with interscellar_volumes table (to map pair->cell IDs). Auto-detected from mesh-zarr if not provided.")
     p.add_argument("--pair-opacity", type=float, default=0.6, help="Opacity for the interscellar volume layer")
     p.add_argument("--cells-opacity", type=float, default=0.7, help="Opacity for the cell-only layers")
-    p.add_argument("--halo-bboxes-pickle", required=True,
-                   help="Path to pickle file with halo bounding boxes from find_cell_neighbors_3d.py")
+    p.add_argument("--halo-bboxes-pickle", required=False, default=None,
+                   help="Path to pickle file with halo bounding boxes. Auto-detected or computed from segmentation if not provided.")
     args = p.parse_args()
 
     try:
         mesh_zarr_path = _find_file(args.mesh_zarr, "Mesh zarr", script_dir)
         seg_zarr_path = _find_file(args.seg_zarr, "Segmentation zarr", script_dir)
-        db_path_str = _find_file(args.db, "Database", script_dir)
-        halo_bboxes_path = _find_file(args.halo_bboxes_pickle, "Halo bboxes pickle", script_dir)
     except FileNotFoundError as e:
         print(f"Error: {e}")
         sys.exit(1)
+    
+    # Auto-detect db path if not provided
+    db_path_str = None
+    if args.db is None:
+        mesh_dir = os.path.dirname(mesh_zarr_path) if os.path.dirname(mesh_zarr_path) else "."
+        mesh_basename = os.path.basename(mesh_zarr_path)
+        base_name = os.path.splitext(mesh_basename)[0]
+        # Remove _interscellar_volumes suffix if present
+        while base_name.endswith('_interscellar_volumes'):
+            base_name = base_name[:-len('_interscellar_volumes')]
+        possible_db = os.path.join(mesh_dir, f"{base_name}_interscellar_volumes.db")
+        if os.path.exists(possible_db):
+            db_path_str = possible_db
+            print(f"Auto-detected database: {db_path_str}")
+        else:
+            # Try CSV as fallback
+            possible_csv = os.path.join(mesh_dir, f"{base_name}_volumes.csv")
+            if os.path.exists(possible_csv):
+                db_path_str = None  # Will use CSV directly
+                print(f"Auto-detected CSV file: {possible_csv}")
+            else:
+                print(f"Warning: Could not auto-detect database or CSV. Will try to find CSV in directory.")
+                db_path_str = None
+    else:
+        try:
+            db_path_str = _find_file(args.db, "Database", script_dir)
+        except FileNotFoundError as e:
+            print(f"Warning: {e}")
+            db_path_str = None
+    
+    # Auto-detect halo bboxes pickle if not provided
+    halo_bboxes_path = None
+    if args.halo_bboxes_pickle is None:
+        mesh_dir = os.path.dirname(mesh_zarr_path) if os.path.dirname(mesh_zarr_path) else "."
+        possible_pickles = [
+            os.path.join(mesh_dir, "neighbor_graph_halo_bboxes.pkl"),
+            os.path.join(mesh_dir, "*_halo_bboxes.pkl"),
+        ]
+        # Try to find any halo_bboxes pickle in the directory
+        import glob
+        found_pickle = None
+        for pattern in possible_pickles:
+            matches = glob.glob(pattern)
+            if matches:
+                found_pickle = matches[0]
+                break
+        if found_pickle:
+            halo_bboxes_path = found_pickle
+            print(f"Auto-detected halo bboxes pickle: {halo_bboxes_path}")
+        else:
+            halo_bboxes_path = None
+            print(f"Warning: Could not auto-detect halo bboxes pickle. Will compute from segmentation if needed.")
+    else:
+        try:
+            halo_bboxes_path = _find_file(args.halo_bboxes_pickle, "Halo bboxes pickle", script_dir)
+        except FileNotFoundError as e:
+            print(f"Warning: {e}")
+            halo_bboxes_path = None
     
     print(f"Loading mesh zarr: {mesh_zarr_path}")
     mesh_store = zarr.open(mesh_zarr_path, mode="r")
@@ -106,71 +162,117 @@ def main():
         print(f"  mesh shape: {mesh.shape}")
         sys.exit(1)
 
-    print(f"Loading database: {db_path_str}")
+    print(f"Loading cell IDs for pair {args.pair_id}...")
     cell_a_id, cell_b_id = None, None
     
-    conn = sqlite3.connect(db_path_str)
-    try:
-        row = conn.execute(
-            "SELECT cell_a_id, cell_b_id FROM interscellar_volumes WHERE pair_id=?",
-            (args.pair_id,)
-        ).fetchone()
-        
-        count = conn.execute("SELECT COUNT(*) FROM interscellar_volumes").fetchone()[0]
-        
-        if row is not None:
-            cell_a_id, cell_b_id = int(row[0]), int(row[1])
-        elif count == 0:
-            print(f"Database is empty, trying CSV file as fallback...")
-            csv_path = db_path_str.replace('.db', '.csv')
-            if os.path.exists(csv_path):
-                df = pd.read_csv(csv_path)
-                pair_data = df[df['pair_id'] == args.pair_id]
-                if len(pair_data) > 0:
-                    cell_a_id = int(pair_data.iloc[0]['cell_a_id'])
-                    cell_b_id = int(pair_data.iloc[0]['cell_b_id'])
-                    print(f"Found pair in CSV: {csv_path}")
-                else:
-                    print(f"Pair {args.pair_id} not found in CSV either")
-                    if len(df) > 0:
-                        min_id = df['pair_id'].min()
-                        max_id = df['pair_id'].max()
-                        print(f"Valid pair_id range in CSV: [{min_id}, {max_id}]")
-                        print(f"Total pairs in CSV: {len(df)}")
+    if db_path_str and os.path.exists(db_path_str):
+        print(f"Loading from database: {db_path_str}")
+        conn = sqlite3.connect(db_path_str)
+        try:
+            row = conn.execute(
+                "SELECT cell_a_id, cell_b_id FROM interscellar_volumes WHERE pair_id=?",
+                (args.pair_id,)
+            ).fetchone()
+            
+            count = conn.execute("SELECT COUNT(*) FROM interscellar_volumes").fetchone()[0]
+            
+            if row is not None:
+                cell_a_id, cell_b_id = int(row[0]), int(row[1])
+            elif count == 0:
+                print(f"Database is empty, trying CSV file as fallback...")
+                csv_path = db_path_str.replace('.db', '.csv')
+                if os.path.exists(csv_path):
+                    df = pd.read_csv(csv_path)
+                    pair_data = df[df['pair_id'] == args.pair_id]
+                    if len(pair_data) > 0:
+                        cell_a_id = int(pair_data.iloc[0]['cell_a_id'])
+                        cell_b_id = int(pair_data.iloc[0]['cell_b_id'])
+                        print(f"Found pair in CSV: {csv_path}")
+        finally:
+            conn.close()
+    
+    # Try CSV file directly if db_path_str is None or pair not found
+    if cell_a_id is None or cell_b_id is None:
+        mesh_dir = os.path.dirname(mesh_zarr_path) if os.path.dirname(mesh_zarr_path) else "."
+        mesh_basename = os.path.basename(mesh_zarr_path)
+        base_name = os.path.splitext(mesh_basename)[0]
+        while base_name.endswith('_interscellar_volumes'):
+            base_name = base_name[:-len('_interscellar_volumes')]
+        csv_path = os.path.join(mesh_dir, f"{base_name}_volumes.csv")
+        if os.path.exists(csv_path):
+            print(f"Trying CSV file: {csv_path}")
+            df = pd.read_csv(csv_path)
+            pair_data = df[df['pair_id'] == args.pair_id]
+            if len(pair_data) > 0:
+                cell_a_id = int(pair_data.iloc[0]['cell_a_id'])
+                cell_b_id = int(pair_data.iloc[0]['cell_b_id'])
+                print(f"Found pair in CSV: {csv_path}")
             else:
-                print(f"CSV file not found: {csv_path}")
-    finally:
-        conn.close()
+                if len(df) > 0:
+                    min_id = df['pair_id'].min()
+                    max_id = df['pair_id'].max()
+                    print(f"Pair {args.pair_id} not found in CSV. Valid range: [{min_id}, {max_id}], Total: {len(df)}")
     
     if cell_a_id is None or cell_b_id is None:
         print(f"\nError: pair_id {args.pair_id} not found in database or CSV")
+        print(f"Please provide --db or ensure CSV file exists in the same directory as mesh-zarr")
         sys.exit(1)
     
     print(f"Pair {args.pair_id}: Cell A={cell_a_id}, Cell B={cell_b_id}")
 
-    print("Computing union bbox from halo bboxes for cells...")
+    print("Computing union bbox for cells...")
     
-    if not os.path.exists(halo_bboxes_path):
-        print(f"Error: Halo bounding boxes pickle file not found: {halo_bboxes_path}")
-        sys.exit(1)
-    
-    with open(halo_bboxes_path, "rb") as f:
-        bbox_data = pickle.load(f)
-    
-    if 'all_bboxes_with_halo' in bbox_data:
-        halo_bboxes = bbox_data['all_bboxes_with_halo']
-    elif isinstance(bbox_data, dict):
-        halo_bboxes = bbox_data
-    else:
-        print(f"Error: Invalid format in halo bounding boxes pickle file")
-        sys.exit(1)
+    # Try to load halo bboxes from pickle if provided
+    halo_bboxes = {}
+    if halo_bboxes_path and os.path.exists(halo_bboxes_path):
+        print(f"Loading halo bboxes from pickle: {halo_bboxes_path}")
+        with open(halo_bboxes_path, "rb") as f:
+            bbox_data = pickle.load(f)
+        
+        if 'all_bboxes_with_halo' in bbox_data:
+            halo_bboxes = bbox_data['all_bboxes_with_halo']
+        elif isinstance(bbox_data, dict):
+            halo_bboxes = bbox_data
+        else:
+            print(f"Warning: Invalid format in halo bounding boxes pickle file, will compute from segmentation")
+            halo_bboxes = {}
     
     if cell_a_id not in halo_bboxes or cell_b_id not in halo_bboxes:
-        print(f"Error: Halo bboxes not found for cell A={cell_a_id} or cell B={cell_b_id}")
-        sys.exit(1)
-    
-    bbox_a = halo_bboxes[cell_a_id]
-    bbox_b = halo_bboxes[cell_b_id]
+        print(f"Computing bounding boxes from segmentation labels...")
+        labels_array = np.asarray(labels)
+        
+        def compute_bbox(cell_id):
+            coords = np.argwhere(labels_array == cell_id)
+            if coords.size == 0:
+                return None
+            z_min, y_min, x_min = coords.min(axis=0)
+            z_max, y_max, x_max = coords.max(axis=0)
+            # Add small padding
+            pad = 2
+            return (slice(max(0, z_min - pad), min(labels_array.shape[0], z_max + pad + 1)),
+                    slice(max(0, y_min - pad), min(labels_array.shape[1], y_max + pad + 1)),
+                    slice(max(0, x_min - pad), min(labels_array.shape[2], x_max + pad + 1)))
+        
+        if cell_a_id not in halo_bboxes:
+            bbox_a = compute_bbox(cell_a_id)
+            if bbox_a is None:
+                print(f"Error: Cell A={cell_a_id} not found in segmentation")
+                sys.exit(1)
+            halo_bboxes[cell_a_id] = bbox_a
+        else:
+            bbox_a = halo_bboxes[cell_a_id]
+        
+        if cell_b_id not in halo_bboxes:
+            bbox_b = compute_bbox(cell_b_id)
+            if bbox_b is None:
+                print(f"Error: Cell B={cell_b_id} not found in segmentation")
+                sys.exit(1)
+            halo_bboxes[cell_b_id] = bbox_b
+        else:
+            bbox_b = halo_bboxes[cell_b_id]
+    else:
+        bbox_a = halo_bboxes[cell_a_id]
+        bbox_b = halo_bboxes[cell_b_id]
     
     z_start = min(bbox_a[0].start, bbox_b[0].start)
     z_stop = max(bbox_a[0].stop, bbox_b[0].stop)

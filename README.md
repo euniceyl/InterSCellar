@@ -67,3 +67,23 @@ neighbors_2d, adata, conn = interscellar.find_cell_neighbors_2d(
     n_jobs=4
 )
 ```
+
+### Utilities:
+
+**Volume Visualization**
+```sh
+visualize-all-3d \
+  --cell-only-zarr "results/cell_only_volumes.zarr" \
+  --interscellar-zarr "results/interscellar_volumes.zarr" \
+  --cell-only-opacity 0.7 \
+  --interscellar-opacity 0.9
+```
+
+```sh
+visualize-pair-3d \
+  --pair-id 123 \
+  --mesh-zarr "results/interscellar_volumes.zarr" \
+  --seg-zarr "data/segmentation.zarr" \
+  --pair-opacity 0.6 \
+  --cells-opacity 0.7
+```
