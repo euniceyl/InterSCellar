@@ -69,8 +69,8 @@ all = [
 ]
 
 [project.scripts]
-visualize-all-3d = "visualization.visualize_all_3d:main"
-visualize-pair-3d = "visualization.visualize_pair_3d:main"
+visualize-all-3d = "interscellar.visualization.visualize_all_3d:main"
+visualize-pair-3d = "interscellar.visualization.visualize_pair_3d:main"
 
 [project.urls]
 Homepage = "https://github.com/euniceyl/InterSCellar"
