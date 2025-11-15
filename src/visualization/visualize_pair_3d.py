@@ -230,7 +230,6 @@ def main():
     
     if pair_coords.size == 0:
         print(f"Warning: pair_id {args.pair_id} not found in interscellar volumes")
-        print(f"Trying to find cells in cell-only volumes to determine region...")
 
         cell_a_coords = np.argwhere(cell_only_array == cell_a_id)
         cell_b_coords = np.argwhere(cell_only_array == cell_b_id)
@@ -311,10 +310,8 @@ def main():
 
     v = napari.Viewer(title=f"Pair {args.pair_id}: Cell A={cell_a_id}, Cell B={cell_b_id}")
     
-    # Add interscellar volume layer
     v.add_labels(pair_mask.astype(np.uint8), name=f"interscellar_volume_pair_{args.pair_id}", opacity=args.pair_opacity)
     
-    # Add cell-only volumes for the two cells
     v.add_labels(cell_a_mask.astype(np.uint8), name=f"cell_{cell_a_id}_only", opacity=args.cells_opacity)
     v.add_labels(cell_b_mask.astype(np.uint8), name=f"cell_{cell_b_id}_only", opacity=args.cells_opacity)
     

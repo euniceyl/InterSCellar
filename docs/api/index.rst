@@ -11,11 +11,10 @@ The main API functions are available directly from the ``interscellar`` package:
 .. toctree::
    :maxdepth: 2
 
-   api_2d
    api_3d
-   visualization
+   api_2d
 
-API Modules
+API
 -----------
 
 .. automodule:: interscellar

@@ -5,7 +5,7 @@ on:
     branches: [ main ]
     paths:
       - 'docs/**'
-      - 'README.md'  # Triggers rebuild when README changes (main page includes README content)
+      - 'README.md'
       - 'src/**'
       - 'pyproject.toml'
       - '.github/workflows/docs.yml'

@@ -12,7 +12,7 @@ The 2D pipeline starts with detecting cell neighbors based on surface distance:
 
    import interscellar
 
-   neighbors_2d, adata, conn = interscellar.find_all_neighbors_2d(
+   neighbors_2d, adata, conn = interscellar.find_cell_neighbors_2d(
        polygon_json_path="data/cell_polygons.json",
        metadata_csv_path="data/cell_metadata.csv",
        max_distance_um=1.0,

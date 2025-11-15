@@ -678,9 +678,6 @@ def compute_interscellar_volumes_for_all_pairs(
     
     print(f"Computed interscellar volumes for {len(all_results)} total cell neighbor pairs")
     
-    # Note: Cleanup is deferred until after all steps complete (handled in wrapper)
-    # This allows resuming if the job fails later
-    
     return all_results
 
 def _process_cell_type_group(
@@ -1211,7 +1208,7 @@ def compute_interscellar_volumes_for_neighbor_pairs(
         intracellular_threshold_um=intracellular_threshold_um,
         n_jobs=n_jobs,
         intermediate_results_dir=intermediate_results_dir,
-        output_mesh_zarr=output_mesh_zarr  # Pass for incremental writing
+        output_mesh_zarr=output_mesh_zarr
     )
     
     return results
@@ -1286,7 +1283,7 @@ def _write_chunk_to_mesh_zarr(
                         zarr_dataset[z_start:z_stop, y_start:y_stop, x_start:x_stop] = merged_region
                         
                         del existing_region, merged_region
-                        del mesh_region_labeled, mesh_region_bool  # Clean up source arrays too
+                        del mesh_region_labeled, mesh_region_bool
                     
                     pairs_written += 1
                     
@@ -1808,7 +1805,6 @@ def export_interscellar_volumes_to_duckdb(conn: sqlite3.Connection, output_file:
     print(f"  - Analytical views created for volume analysis")
     print(f"  - Metadata table populated")
     
-    # Print example queries
     print("\nExample DuckDB queries:")
     print("1. Cell type volume stats: SELECT * FROM cell_type_volume_statistics")
     print("2. Volume distribution: SELECT * FROM volume_distribution LIMIT 10")
@@ -2036,7 +2032,6 @@ def build_interscellar_volume_database_from_neighbors(
     
     conn = create_interscellar_volume_database(db_path)
     
-    # Populate cells table from neighbor database if available
     if neighbor_db_path and os.path.exists(neighbor_db_path):
         try:
             import sqlite3 as sqlite3_neighbor
@@ -2044,7 +2039,6 @@ def build_interscellar_volume_database_from_neighbors(
             try:
                 neighbor_cells = pd.read_sql_query("SELECT * FROM cells", neighbor_conn)
                 if not neighbor_cells.empty:
-                    # Ensure column names match
                     if 'cell_id' not in neighbor_cells.columns and 'CellID' in neighbor_cells.columns:
                         neighbor_cells = neighbor_cells.rename(columns={'CellID': 'cell_id'})
                     if 'cell_id' in neighbor_cells.columns:
@@ -2059,7 +2053,6 @@ def build_interscellar_volume_database_from_neighbors(
         except Exception as e:
             print(f"Warning: Could not access neighbor database for cells: {e}")
     
-    # If cells table is still empty, create from volume pairs
     cursor = conn.cursor()
     cursor.execute("SELECT COUNT(*) FROM cells")
     if cursor.fetchone()[0] == 0:

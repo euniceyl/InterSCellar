@@ -14,7 +14,7 @@ Or install from source:
 
 .. code-block:: bash
 
-   git clone https://github.com/euniceyl/InterSCellar.git
+   git clone https://github.com/hms-dbmi/InterSCellar.git
    cd InterSCellar
    pip install -e .
 
